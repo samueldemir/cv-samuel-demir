@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Save the published portfolio and its rendering dependencies for local hosting."""
+import concurrent.futures
+import hashlib
+import html
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+from urllib.parse import urljoin, urlsplit
+
+SOURCE = "https://samueldemir.framer.website/"
+ROOT = Path(__file__).resolve().parents[1]
+HOSTS = {"framerusercontent.com", "app.framerstatic.com"}
+ICONS = ["LinkedinLogo", "GithubLogo", "YoutubeLogo", "StackOverflowLogo"]
+ICON_BASE = "https://framer.com/m/phosphor-icons/"
+URLS = re.compile(r'''https?://[^\s"'`<>\\)]+''')
+RELATIVE = re.compile(r'''(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)(["'`])((?:\./|\.\./)[^"'`\s]+?\.(?:mjs|js|css|json)(?:\?[^"'`\s]*)?)\1''')
+EXTENSIONS = {".mjs", ".js", ".css", ".json", ".png", ".jpg", ".jpeg",
+              ".webp", ".svg", ".avif", ".gif", ".woff", ".woff2", ".ttf", ".mp4", ".webm", ".framercms", ".lottie"}
+TEXT = {".mjs", ".js", ".css", ".json", ".svg", ".html"}
+
+
+def normalize(url):
+    return html.unescape(url)
+
+
+def supported(url):
+    p = urlsplit(url)
+    if url in {ICON_BASE + icon + ".js@0.0.57" for icon in ICONS}:
+        return True
+    return (p.netloc in HOSTS and Path(p.path).suffix in EXTENSIONS
+            and not any(c in url for c in "{}$"))
+
+
+def destination(url):
+    if url == SOURCE:
+        return ROOT / "index.html"
+    p = urlsplit(url)
+    path = Path("assets") / p.netloc / p.path.lstrip("/")
+    if path.name.endswith(".js@0.0.57"):
+        path = path.with_name(path.name.replace(".js@0.0.57", ".mjs"))
+    if p.query:
+        digest = hashlib.sha256(p.query.encode()).hexdigest()[:12]
+        path = path.with_name(path.stem + "--" + digest + path.suffix)
+    if ".." in path.parts:
+        raise ValueError("Invalid asset path")
+    return ROOT / path
+
+
+def references(text, origin):
+    refs = [(m.group(), normalize(m.group())) for m in URLS.finditer(text)]
+    if urlsplit(origin).path.endswith((".mjs", ".js", ".css")):
+        refs += [(m.group(2), urljoin(origin, m.group(2))) for m in RELATIVE.finditer(text)]
+        # Framer constructs collection URLs from its original virtual module URL.
+        for m in re.finditer(r'''new URL\(`([^`]+\.framercms)`,`(https://[^`]+)`\)\.href\.replace\(`/modules/`,`/cms/`\)''', text):
+            collection = urljoin(m.group(2), m.group(1)).replace("/modules/", "/cms/")
+            refs.append((collection, collection))
+    return [(raw, url) for raw, url in refs if supported(url)]
+
+
+def download(url):
+    target = destination(url)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Keep original bytes separately until every dependency is discovered.
+    fetched = subprocess.run(["curl", "--fail", "--location", "--silent", "--show-error",
+                              "--retry", "2", "--max-time", "90", url], capture_output=True)
+    if fetched.returncode:
+        raise RuntimeError(f"{url}: {fetched.stderr.decode().strip()}")
+    data = fetched.stdout
+    if target.suffix in TEXT:
+        return url, data, references(data.decode("utf-8"), url)
+    if target.suffix == ".framercms":
+        return url, data, references(data.decode("latin1"), url)
+    return url, data, []
+
+
+def main():
+    originals = {}
+    pending = [SOURCE] + [ICON_BASE + icon + ".js@0.0.57" for icon in ICONS]
+    seen = set(pending)
+    while pending:
+        next_batch = set()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+            for url, data, refs in pool.map(download, sorted(pending)):
+                originals[url] = (data, refs)
+                for _, dependency in refs:
+                    if dependency not in seen:
+                        seen.add(dependency)
+                        next_batch.add(dependency)
+        print(f"Downloaded {len(originals)} resources; {len(next_batch)} remaining", flush=True)
+        pending = next_batch
+
+    for url, (data, refs) in originals.items():
+        target = destination(url)
+        if target.suffix in TEXT:
+            text = data.decode("utf-8")
+            replacements = {}
+            for raw, dependency in refs:
+                relative = os.path.relpath(destination(dependency), target.parent).replace(os.sep, "/")
+                if not relative.startswith("."):
+                    relative = "./" + relative
+                if urlsplit(url).path.endswith(".mjs") and raw.startswith("https://"):
+                    # Published modules store asset URLs in template literals.
+                    # Resolve against the module, not the page URL, after hydration.
+                    relative = "${new URL(" + json.dumps(relative) + ",import.meta.url).href}"
+                replacements[raw] = relative
+            # One pass avoids replacing a shorter URL inside its responsive variants.
+            if replacements:
+                pattern = re.compile("|".join(re.escape(s) for s in sorted(replacements, key=len, reverse=True)))
+                text = pattern.sub(lambda m: replacements[m.group()], text)
+            if url == SOURCE:
+                text = re.sub(r'<script\b[^>]*src="https://events\.framer\.com/[^>]*>\s*</script>', '', text)
+            if target.name.startswith("script_main."):
+                # The editor is a hosted authoring feature, not part of the portfolio.
+                text = text.replace("EditorBar:t===void 0?void 0:", "EditorBar:true?void 0:")
+            # This custom component requests a nonexistent Google Fonts family.
+            # It already falls back to the existing fonts on the published site.
+            if target.suffix in {".mjs", ".js"}:
+                text = text.replace("https://fonts.googleapis.com/css2?family=Clash+Grotesk:wght@400;500;600;700&display=swap", "data:text/css,")
+            if "shared-lib." in target.name:
+                base = os.path.relpath(ROOT / "assets/framer.com/m/phosphor-icons", target.parent).replace(os.sep, "/") + "/"
+                text = text.replace(ICON_BASE, "${new URL(" + json.dumps(base) + ",import.meta.url).href}")
+                text = text.replace("${bl}${_}.js@0.0.57", "${bl}${_}.mjs")
+            data = text.encode("utf-8")
+        elif target.suffix == ".framercms":
+            # CMS records contain length-prefixed JSON image objects. Update both
+            # the JSON and its byte length so Framer's binary decoder stays valid.
+            for match in reversed(list(re.finditer(rb'\{"src":.*?\}', data))):
+                start, end = match.span()
+                original = match.group()
+                if int.from_bytes(data[start-4:start], "big") != len(original):
+                    raise ValueError("Unexpected CMS image encoding")
+                image = json.loads(original)
+                source = normalize(image["src"])
+                image["src"] = "./" + destination(source).relative_to(ROOT).as_posix()
+                if "srcSet" in image:
+                    image["srcSet"] = URLS.sub(
+                        lambda m: "./" + destination(normalize(m.group())).relative_to(ROOT).as_posix(),
+                        image["srcSet"],
+                    )
+                updated = json.dumps(image, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                data = data[:start-4] + len(updated).to_bytes(4, "big") + updated + data[end:]
+        target.write_bytes(data)
+
+    manifest = [{"source": url, "local": str(destination(url).relative_to(ROOT)),
+                 "bytes": destination(url).stat().st_size} for url in sorted(originals)]
+    (ROOT / "assets" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"Saved {len(manifest)} resources to {ROOT}")
+
+
+if __name__ == "__main__":
+    main()
