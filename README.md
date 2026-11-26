@@ -35,9 +35,9 @@ python3 tools/mirror.py
 Benötigt Python 3, `curl` und Internetzugriff. Die Aktualisierung überschreibt
 `index.html` und die zugehörigen Ressourcen mit der dann veröffentlichten Version.
 
-Die Kopie verwendet den veröffentlichten Framer-Code; sie ist kein bearbeitbares
-Framer-Projekt. Der gehostete Framer-Editor und das externe Analytics-Skript
-werden nicht geladen. Externe Links, etwa zum Lebenslauf, bleiben erhalten.
+Der Export enthält die lokalen Laufzeitdateien für Layout, Animationen und
+Projektliste. Der Exporter entfernt den Framer-Editor, das Badge,
+Tracking-Skripte und den ungenutzten Suchindex.
 
 ## Geprüft
 

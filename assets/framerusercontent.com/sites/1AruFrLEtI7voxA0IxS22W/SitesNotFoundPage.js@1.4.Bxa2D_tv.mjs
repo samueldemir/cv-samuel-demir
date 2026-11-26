@@ -127,4 +127,3 @@ import{n as e}from"./rolldown-runtime.CNOWq4Kh.mjs";import{T as t,l as n,o as r,
         --color-secondary: #888;
       }
     }`]),u={exports:{default:{type:`reactComponent`,name:`component`,slots:[],annotations:{framerContractVersion:`1`}},__FramerMetadata__:{type:`variable`}}}})))()}function f(){return(f=e((()=>{d()})))()}f();export{u as __FramerMetadata__,l as default};
-//# sourceMappingURL=SitesNotFoundPage.js@1.4.Bxa2D_tv.mjs.map

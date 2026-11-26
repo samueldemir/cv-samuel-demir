@@ -106,6 +106,48 @@ def references(text, origin):
     return [(raw, url) for raw, url in refs if supported(url)]
 
 
+def remove_framer_extras(text, filename):
+    if filename == "index.html":
+        text = re.sub(r'(?m)^[ \t]*<!-- (?:Made in Framer|Published |(?:Start|End) of (?:head|body)(?:Start|End))[^\n]*-->\n', '', text)
+        text = re.sub(r'(?m)^[ \t]*<meta name="(?:generator|framer-search-index(?:-fallback)?)"[^>]*>\n', '', text)
+        text = re.sub(r'<script\b[^>]*src="https://events\.framer\.com/[^>]*>\s*</script>', '', text)
+        text = re.sub(r'<script>[^<]*__framer_force_showing_editorbar_since[^<]*</script>', '', text)
+        text = re.sub(r'<script>!function\(\)\{var w="framer_variant";[\s\S]*?</script>', '', text)
+        text = re.sub(r'(?m)^[ \t]*<div id="__framer-badge-container">[^\n]*</div>\n', '', text)
+        text = re.sub(r'@supports \(z-index:calc\(infinity\)\)\{#__framer-badge-container\{[^{}]*\}\}', '', text)
+        text = re.sub(r'#__framer-badge-container\{[^{}]*\}|\.framer-ChluH \.framer-(?:ay1wve|nfkld1)\{[^{}]*\}', '', text)
+        text = text.replace(' data-redirect-timezone="1"', '').replace(' data-framer-generated-canonical', '')
+        return text.replace(SOURCE, "https://samuel-demir.ch/")
+
+    text = re.sub(r'(?m)^//[#@] sourceMappingURL=[^\n]*\n?', '', text)
+    if filename.startswith("script_main."):
+        text = re.sub(r'\(function\(\)\{[^\n]*?getElementById\(`__framer-badge-container`\)[^\n]*?\}\)\(\)', '', text)
+        text = re.sub(r',siteCanonicalURL:`[^`]+`,EditorBar:[^\n]*?,adaptLayoutToTextDirection:', ',adaptLayoutToTextDirection:', text)
+        text = re.sub(r',loadSnippetsModule:new \w+\(\(\)=>import\(`[^`]+`\)\)', '', text)
+        text = re.sub(r'function U\(\)\{X&&t\.__framer_events\.push\(arguments\)\}', '', text)
+        text = re.sub(r';U\(r\?`published_site_load_recoverable_error`:[^\n]*?\}\)\}try\{', '}try{', text)
+        text = re.sub(r't!==void 0&&\(async\(\)=>\{let e=G\[a\],[^\n]*?`framer:pageview`[^\n]*?\}\)\(\);', '', text)
+        text = text.replace('t.__framer_events=t.__framer_events||[],', '')
+        text = text.replace('editorBarDisableFrameAncestorsSecurity:!1,', '')
+        text = re.sub(
+            r'if\(r\)\{if\(console\.warn\(`Caught a recoverable error\.[^`]*`,e,i\),Math\.random\(\)>\.01\)return\}'
+            r'else console\.error\(`Caught a fatal error\.[^`]*`,e,i\)',
+            'if(r)console.warn(`Could not hydrate the page.`,e,i);else console.error(`Could not initialize the page.`,e,i)', text,
+        )
+        text = text.replace('B as t,D as n,F as r,P as i,R as a,S as o,T as s,_ as c,a as l,b as u,d,g as f,h as p,i as m,k as h,n as g,r as _,t as v,y,z as b',
+                            'B as t,P as i,R as a,T as s,a as l,d,n as g,r as _,t as v,z as b')
+        text = text.replace('B as x,G as S,H as C,J as w,St as T,V as E,W as D,X as O,Z as k,dt as A,et as j,f as ee,h as te,ht as M,m as N,ot as P,rt as F,s as I,tt as L,u as R,xt as z,z as B',
+                            'B as x,G as S,H as C,J as w,V as E,W as D,X as O,Z as k,et as j,h as te,m as N,rt as F,s as I,tt as L,u as R,xt as z,z as B')
+    elif filename.startswith("shared-lib."):
+        text = re.sub(r'`\.framer-ChluH \.framer-(?:ay1wve|nfkld1) \{[^{}]*\}`,', '', text)
+        text = re.sub(r'async function Wp\(e,t,n\)\{[^\n]*?export\{Vp as a,', 'export{Vp as a,', text)
+        for export in ('qp as i,', 'Wp as n,', 'Yp as r,', 'Jp as t,'):
+            text = text.replace(export, '')
+    elif filename in {f"{icon}.mjs" for icon in ICONS}:
+        text = text.replace(' * Learn More: https://www.framer.com/asset-urls\n', '')
+    return text
+
+
 def download(url):
     target = destination(url)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -122,7 +164,8 @@ def download(url):
     else:
         data = fetched.stdout
     if target.suffix in TEXT:
-        return url, data, references(data.decode("utf-8"), url)
+        text = remove_framer_extras(data.decode("utf-8").replace('\r\n', '\n'), target.name)
+        return url, text.encode("utf-8"), references(text, url)
     if target.suffix == ".framercms":
         return url, data, references(data.decode("latin1"), url)
     return url, data, []
@@ -134,13 +177,10 @@ def customize_portfolio(text, filename):
             r'(<a\b[^<>]*href="https://www\.dropbox\.com/[^"<>]*/lebenslauf_samuel_demir\.pdf[^"<>]*") rel(?=>)',
             r'\1 target="_blank" rel="noopener noreferrer"', text,
         )
-        text = re.sub(r'(?m)^[ \t]*<div id="__framer-badge-container">[^\n]*</div>\n', '', text)
         text = re.sub(
             r'<!--\$--><a\b[^<>]*data-framer-name="Built In"[^<>]*>'
             r'<div\b[^<>]*data-framer-name="Built In Logo"[^<>]*></div></a><!--/\$-->', '', text,
         )
-    elif filename.startswith("script_main."):
-        text = re.sub(r'\(function\(\)\{[^\n]*?getElementById\(`__framer-badge-container`\)[^\n]*?\}\)\(\)', '', text)
     elif filename.startswith("shared-lib."):
         text = text.replace(
             'nodeId:`JyGMxwMno`,openInNewTab:!1,relValues:[]',
@@ -251,12 +291,7 @@ def main():
                 pattern = re.compile("|".join(re.escape(s) for s in sorted(replacements, key=len, reverse=True)))
                 text = pattern.sub(lambda m: replacements[m.group()], text)
             if url == SOURCE:
-                text = re.sub(r'<script\b[^>]*src="https://events\.framer\.com/[^>]*>\s*</script>', '', text)
-                text = re.sub(r'<script>[^<]*__framer_force_showing_editorbar_since[^<]*</script>', '', text)
-                text = re.sub(r'(?m)^[ \t]+$', '', text.replace('\r\n', '\n'))
-            if target.name.startswith("script_main."):
-                # The editor is a hosted authoring feature, not part of the portfolio.
-                text = text.replace("EditorBar:t===void 0?void 0:", "EditorBar:true?void 0:")
+                text = re.sub(r'(?m)^[ \t]+$', '', text)
             # This custom component requests a nonexistent Google Fonts family.
             # It already falls back to the existing fonts on the published site.
             if target.suffix in {".mjs", ".js"}:
