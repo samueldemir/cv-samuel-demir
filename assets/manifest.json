@@ -55,11 +55,6 @@
     "bytes": 296
   },
   {
-    "source": "https://framerusercontent.com/assets/0dZAOdg8ja8w3hSptcqbmyG78.png",
-    "local": "assets/framerusercontent.com/assets/0dZAOdg8ja8w3hSptcqbmyG78.png",
-    "bytes": 305904
-  },
-  {
     "source": "https://framerusercontent.com/assets/0kOTN4Irk6DzcCmstf4fEbtO00.lottie",
     "local": "assets/framerusercontent.com/assets/0kOTN4Irk6DzcCmstf4fEbtO00.lottie",
     "bytes": 1052
@@ -243,11 +238,6 @@
     "source": "https://framerusercontent.com/images/0crM0mL2pSzrIGYi3lLkbZrM.png?width=157&height=125",
     "local": "assets/framerusercontent.com/images/0crM0mL2pSzrIGYi3lLkbZrM--756771657b9f.png",
     "bytes": 3973
-  },
-  {
-    "source": "https://framerusercontent.com/images/0dZAOdg8ja8w3hSptcqbmyG78.png",
-    "local": "assets/framerusercontent.com/images/0dZAOdg8ja8w3hSptcqbmyG78.png",
-    "bytes": 81864
   },
   {
     "source": "https://framerusercontent.com/images/2fOQgvp9HuhvbZV6KWKZ8VPEKpY.png?width=327&height=318",
@@ -672,7 +662,7 @@
   {
     "source": "https://framerusercontent.com/sites/1AruFrLEtI7voxA0IxS22W/shared-lib.B_ixuluP.mjs",
     "local": "assets/framerusercontent.com/sites/1AruFrLEtI7voxA0IxS22W/shared-lib.B_ixuluP.mjs",
-    "bytes": 356115
+    "bytes": 356136
   },
   {
     "source": "https://framerusercontent.com/third-party-assets/fontshare/wf/FOIKAJFLDFRPJ452NHBMMHCNDL4FUUBB/5AC3Y6FTG5H7IECKNZVIR7XI64O5YW5S/OB3CIWMGQGGYEGXRXPOVBXWAH4INE6T4.woff2",
@@ -692,6 +682,6 @@
   {
     "source": "https://samueldemir.framer.website/",
     "local": "index.html",
-    "bytes": 380660
+    "bytes": 595936
   }
 ]

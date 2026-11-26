@@ -11,6 +11,15 @@ import subprocess
 from urllib.parse import urljoin, urlsplit
 
 SOURCE = "https://samueldemir.framer.website/"
+SITE_URL = "https://samuel-demir.ch/"
+SITE_TITLE = "Samuel Demir | Senior Data Engineer & Architect in Switzerland"
+SITE_DESCRIPTION = (
+    "Samuel Demir builds data platforms in Switzerland with Databricks, PySpark, Azure, and Terraform. "
+    "Explore his CV, experience, and projects."
+)
+PROFILE_NAME = "Samuel Demir"
+PROFILE_ALT = "Portrait of Samuel Demir"
+OLD_PREVIEW_TAGS = re.compile(r'<meta (?:property="og:image"|name="twitter:image")[^>]*>')
 FRAMER_SPINNER = "https://framerusercontent.com/images/pGiXYozQ3mE4cilNOItfe2L2fUA.svg"
 ROOT = Path(__file__).resolve().parents[1]
 HOSTS = {"framerusercontent.com", "app.framerstatic.com"}
@@ -145,7 +154,7 @@ def remove_framer_extras(text, filename):
         text = re.sub(r'@supports \(z-index:calc\(infinity\)\)\{#__framer-badge-container\{[^{}]*\}\}', '', text)
         text = re.sub(r'#__framer-badge-container\{[^{}]*\}|\.framer-ChluH \.framer-(?:ay1wve|nfkld1)\{[^{}]*\}', '', text)
         text = text.replace(' data-redirect-timezone="1"', '').replace(' data-framer-generated-canonical', '')
-        return text.replace(SOURCE, "https://samuel-demir.ch/")
+        return text.replace(SOURCE, SITE_URL)
 
     text = re.sub(r'(?m)^//[#@] sourceMappingURL=[^\n]*\n?', '', text)
     if filename.startswith("script_main."):
@@ -193,6 +202,10 @@ def download(url):
         data = fetched.stdout
     if target.suffix in TEXT:
         text = remove_framer_extras(data.decode("utf-8").replace('\r\n', '\n'), target.name)
+        if target.name == "index.html":
+            text = OLD_PREVIEW_TAGS.sub('', text)
+        elif target.name.startswith('shared-lib.'):
+            text = update_route_metadata(text)
         return url, text.encode("utf-8"), references(text, url)
     if target.suffix == ".framercms":
         return url, data, references(data.decode("latin1"), url)
@@ -284,6 +297,124 @@ def add_social_links(text, filename):
     return text
 
 
+def add_page_metadata(text):
+    if 'id="site-structured-data"' in text:
+        return text
+    portrait = re.search(r'<img\b[^>]*alt="Profile Image"[^>]*>', text).group()
+    srcset = re.search(r'\bsrcset="([^"]+)"', portrait)
+    image_source = re.search(r'([^\s,]+)\s+1024w(?:\s*,|\s*$)', srcset[1]) if srcset else None
+    image_path = image_source[1] if image_source else re.search(r'\bsrc="([^"]+)"', portrait)[1]
+    image_url = urljoin(SITE_URL, html.unescape(image_path))
+
+    profile = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {"@type": "WebSite", "@id": SITE_URL + "#website", "url": SITE_URL, "name": PROFILE_NAME},
+            {
+                "@type": "ProfilePage",
+                "@id": SITE_URL + "#profile",
+                "url": SITE_URL,
+                "name": SITE_TITLE,
+                "description": SITE_DESCRIPTION,
+                "isPartOf": {"@id": SITE_URL + "#website"},
+                "mainEntity": {
+                    "@type": "Person",
+                    "@id": SITE_URL + "#samuel-demir",
+                    "name": PROFILE_NAME,
+                    "url": SITE_URL,
+                    "jobTitle": "Senior Data Engineer/Architect",
+                    "image": image_url,
+                    "sameAs": [
+                        "https://www.linkedin.com/in/samuel-demir-103b97182",
+                        "https://github.com/samueldemir",
+                        SOCIAL_LINKS["XingLogo"]["href"],
+                    ],
+                },
+            },
+        ],
+    }
+    text = re.sub(r'<title>[^<]*</title>', lambda _: f'<title>{html.escape(SITE_TITLE)}</title>', text, count=1)
+    for key, value in (
+        ('name="description"', SITE_DESCRIPTION),
+        ('property="og:title"', SITE_TITLE),
+        ('property="og:description"', SITE_DESCRIPTION),
+        ('name="twitter:title"', SITE_TITLE),
+        ('name="twitter:description"', SITE_DESCRIPTION),
+    ):
+        text = re.sub(rf'(<meta {key} content=")[^"]*(")',
+                      lambda m: m[1] + html.escape(value) + m[2], text, count=1)
+    text = OLD_PREVIEW_TAGS.sub('', text)
+    preview_tags = '\n    '.join(
+        f'<meta {key} content="{html.escape(value)}">'
+        for key, value in (
+            ('property="og:site_name"', PROFILE_NAME),
+            ('property="og:image"', image_url),
+            ('property="og:image:alt"', PROFILE_ALT),
+            ('name="twitter:image"', image_url),
+            ('name="twitter:image:alt"', PROFILE_ALT),
+        )
+    )
+    structured_data = json.dumps(profile, ensure_ascii=False, indent=2)
+    return re.sub(
+        r'<meta name="twitter:description"[^>]*>',
+        lambda m: f'{m[0]}\n    {preview_tags}\n'
+                  f'    <script type="application/ld+json" id="site-structured-data">\n'
+                  f'{structured_data}\n    </script>',
+        text, count=1,
+    )
+
+
+def update_route_metadata(text):
+    # The runtime sets the title again after hydration.
+    return re.sub(
+        r'description:`[^`]*`,(favicon:`[^`]*`,robots:`max-image-preview:large`),socialImage:`[^`]*`,title:`[^`]*`',
+        lambda m: f'description:{json.dumps(SITE_DESCRIPTION)},{m[1]},'
+                  'socialImage:globalThis.document?.querySelector(\'meta[property="og:image"]\')?.content,'
+                  f'title:{json.dumps(SITE_TITLE)}',
+        text, count=1,
+    )
+
+
+def improve_page_semantics(text, filename):
+    if filename == "index.html":
+        text = add_page_metadata(text)
+        headings = (
+            ('h1', 'p', r'Based in Switzerland, AG\.', None),
+            ('h2', 'p', PROFILE_NAME, None),
+            ('p', 'h2', r'Experience|Education|Contact', None),
+            ('p', 'h2', r'Projects/Certificates', 'Projects and Certifications'),
+            ('p', 'h2', r'Stakes', 'Technology Stack'),
+            ('h2', 'h3', r"Let's\s+Get in Touch!", None),
+        )
+        for old_tag, new_tag, label, replacement in headings:
+            pattern = rf'<{old_tag}(\s+[^<>]+)>(\s*)({label})(\s*)</{old_tag}>'
+            text = re.sub(pattern, lambda m: f'<{new_tag}{m[1]}>{m[2]}{replacement or m[3]}{m[4]}</{new_tag}>', text)
+        text = text.replace('alt="Profile Image"', f'alt="{PROFILE_ALT}"')
+    elif filename.startswith('shared-lib.'):
+        text = text.replace('alt:`Profile Image`', f'alt:`{PROFILE_ALT}`')
+        for old_tag, new_tag, label in (
+            ('`h1`', '`p`', 'Based in Switzerland, AG.'),
+            ('x.h2', 'x.p', PROFILE_NAME),
+            ('x.p', 'x.h2', 'Experience'),
+            ('`h2`', '`h3`', "Let's Get in Touch!"),
+        ):
+            # Each component's label belongs to its immediate element props.
+            pattern = (
+                rf'h\({re.escape(old_tag)},(\{{className:`portfolio-styles-preset-[^`]+`'
+                rf'(?:(?!children:)[^\n])*?children:`{re.escape(label)}`\}})'
+            )
+            text = re.sub(pattern, lambda m: f'h({new_tag},{m[1]}', text)
+        text = text.replace('LBaLTRAOi:`Projects/Certificates`', 'LBaLTRAOi:`Projects and Certifications`')
+        text = text.replace('LBaLTRAOi:`Stakes`', 'LBaLTRAOi:`Technology Stack`')
+    else:
+        return text
+
+    for preset, tags in (('k1qw7j', 'h1,p'), ('1uyq275', 'h2,h3,p'), ('67h40l', 'p,h2')):
+        selector = f'.portfolio-styles-preset-{preset}.rich-text-wrapper '
+        text = text.replace(selector + tags.split(',')[0], selector + f':is({tags})')
+    return text
+
+
 def main():
     originals = {}
     pending = [SOURCE] + [ICON_BASE + icon + ".js@0.0.57" for icon in ICONS]
@@ -329,7 +460,8 @@ def main():
                 text = text.replace(ICON_BASE, "${new URL(" + json.dumps(base) + ",import.meta.url).href}")
                 text = text.replace(".js@0.0.57`", ".mjs`")
             text = customize_portfolio(text, target.name)
-            data = rename_portfolio_identifiers(text).encode("utf-8")
+            text = rename_portfolio_identifiers(text)
+            data = improve_page_semantics(text, target.name).encode("utf-8")
         elif target.suffix == ".framercms":
             # CMS records contain length-prefixed JSON image objects. Update both
             # the JSON and its byte length so Framer's binary decoder stays valid.
