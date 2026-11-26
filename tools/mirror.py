@@ -16,6 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 HOSTS = {"framerusercontent.com", "app.framerstatic.com"}
 ICONS = ["LinkedinLogo", "GithubLogo", "YoutubeLogo", "StackOverflowLogo"]
 ICON_BASE = "https://framer.com/m/phosphor-icons/"
+XING_PROFILE = "https://www.xing.com/profile/Samuel_Demir"
+STACK_OVERFLOW_PROFILE = "https://stackoverflow.com/users/11247816/samuel-demir"
+SOCIAL_ICON_COLOR = "var(--token-258ef8c7-ff75-4402-b09e-8e1423116f70, rgb(255, 255, 255))"
+XING_ICON_VIEWBOX = "-3 -3 30 30"
+# https://github.com/simple-icons/simple-icons/blob/develop/icons/xing.svg
+XING_ICON_PATH = (
+    "M18.188 0c-.517 0-.741.325-.927.66 0 0-7.455 13.224-7.702 13.657.015.024 4.919 9.023 "
+    "4.919 9.023.17.308.436.66.967.66h3.454c.211 0 .375-.078.463-.22.089-.151.089-.346-.009-.536"
+    "l-4.879-8.916c-.004-.006-.004-.016 0-.022L22.139.756c.095-.191.097-.387.006-.535C22.056.078 "
+    "21.894 0 21.686 0h-3.498zM3.648 4.74c-.211 0-.385.074-.473.216-.09.149-.078.339.02.531l2.34 "
+    "4.05c.004.01.004.016 0 .021L1.86 16.051c-.099.188-.093.381 0 .529.085.142.239.234.45.234h3.461"
+    "c.518 0 .766-.348.945-.667l3.734-6.609-2.378-4.155c-.172-.315-.434-.659-.962-.659H3.648v.016z"
+)
 URLS = re.compile(r'''https?://[^\s"'`<>\\)]+''')
 RELATIVE = re.compile(r'''(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)(["'`])((?:\./|\.\./)[^"'`\s]+?\.(?:mjs|js|css|json)(?:\?[^"'`\s]*)?)\1''')
 EXTENSIONS = {".mjs", ".js", ".css", ".json", ".png", ".jpg", ".jpeg",
@@ -105,6 +118,64 @@ def customize_portfolio(text, filename):
             r'/\*#__PURE__\*/\s*\w+\(\w+,\{href:`https://framer\.com/`,[^\n]*?'
             r'"data-framer-name":`Built In Logo`[^}]*\}\)\}\)\}\),', '', text,
         )
+    return add_xing_profile(text, filename)
+
+
+def add_xing_profile(text, filename):
+    if XING_PROFILE in text:
+        return text
+    stack_overflow = re.escape(STACK_OVERFLOW_PROFILE)
+
+    if filename == "index.html":
+        icon = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{XING_ICON_VIEWBOX}" aria-hidden="true" '
+            f'focusable="false" width="20" height="20" fill="{SOCIAL_ICON_COLOR}"><path d="{XING_ICON_PATH}"></path></svg>'
+        )
+        button = (
+            r'<div class="framer-rjxmoh-container"><!--\$--><a\b[^<>]*href="'
+            + stack_overflow + r'"[^<>]*><div\b[^<>]*><div style="display:contents"></div></div></a><!--/\$--></div>'
+        )
+
+        def append_link(match):
+            original = match.group()
+            xing = original.replace(STACK_OVERFLOW_PROFILE, XING_PROFILE)
+            xing = xing.replace('aria-label="Social Link"', 'aria-label="XING profile"')
+            xing = xing.replace('target="_blank"', 'target="_blank" rel="noopener noreferrer"')
+            xing = xing.replace('<div style="display:contents"></div>', f'<div style="display:contents">{icon}</div>')
+            return original + xing
+
+        return re.sub(button, append_link, text)
+
+    if filename.startswith("shared-lib."):
+        # Reuse the neighboring button's layout and assign a distinct Framer node ID.
+        button = (
+            r'/\*#__PURE__\*/ h\(z,\{height:40,width:`40px`,(?:(?!/\*#__PURE__\*/)[^\n])*?'
+            r'\},y,w\),children:/\*#__PURE__\*/ h\(Oe,\{className:`framer-rjxmoh-container`,'
+            r'[^\n]*?FMLNTD1Dj:`' + stack_overflow + r'`,foCNdHmvV:`StackOverflowLogo`,[^\n]*?width:`100%`\}\)\}\)\}\)'
+        )
+
+        def append_component(match):
+            original = match.group()
+            xing = original.replace(STACK_OVERFLOW_PROFILE, XING_PROFILE)
+            xing = xing.replace('`StackOverflowLogo`', '`XingLogo`').replace('vsF8jda5h', 'xing-profile')
+            return original + ',' + xing
+
+        text = re.sub(button, append_component, text)
+        text = text.replace(
+            'href:u,nodeId:`FvH5DUUkQ`',
+            'href:u,nodeId:`FvH5DUUkQ`,...(c===`XingLogo`?{openInNewTab:!0,relValues:[`noopener`,`noreferrer`]}:{})',
+        )
+        text = text.replace('"aria-label":`Social Link`', '"aria-label":c===`XingLogo`?`XING profile`:`Social Link`')
+        icon = (
+            'h(`div`,{style:{display:`contents`},children:h(`svg`,{xmlns:`http://www.w3.org/2000/svg`,'
+            f'viewBox:`{XING_ICON_VIEWBOX}`,"aria-hidden":`true`,focusable:`false`,width:20,height:20,'
+            f'fill:`{SOCIAL_ICON_COLOR}`,children:h(`path`,{{d:`{XING_ICON_PATH}`}})}})}})'
+        )
+        return text.replace(
+            'children:/*#__PURE__*/ h(Dl,{color:',
+            f'children:c===`XingLogo`?{icon}:/*#__PURE__*/ h(Dl,{{color:', 1,
+        )
+
     return text
 
 
