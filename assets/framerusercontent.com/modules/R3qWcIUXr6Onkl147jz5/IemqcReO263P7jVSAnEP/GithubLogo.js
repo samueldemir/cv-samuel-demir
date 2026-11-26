@@ -38,18 +38,18 @@ var Icon = (React) => {
   }
   return IconInner;
 };
-const __FramerMetadata__ = {
+const __PortfolioMetadata__ = {
   exports: {
     default: {
       type: "reactComponent",
       slots: [],
-      annotations: { framerContractVersion: "1" }
+      annotations: { portfolioContractVersion: "1" }
     },
-    __FramerMetadata__: { type: "variable" }
+    __PortfolioMetadata__: { type: "variable" }
   }
 };
 var GithubLogo_default = Icon;
 export {
-  __FramerMetadata__,
+  __PortfolioMetadata__,
   GithubLogo_default as default
 };

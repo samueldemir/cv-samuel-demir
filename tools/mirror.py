@@ -66,6 +66,34 @@ RELATIVE = re.compile(r'''(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)(["'`])((?:\
 EXTENSIONS = {".mjs", ".js", ".css", ".json", ".png", ".jpg", ".jpeg",
               ".webp", ".svg", ".avif", ".gif", ".woff", ".woff2", ".ttf", ".mp4", ".webm", ".framercms", ".lottie"}
 TEXT = {".mjs", ".js", ".css", ".json", ".svg", ".html"}
+PORTFOLIO_NAMESPACE = re.compile(
+    r'(?<![A-Za-z0-9])(?:'
+    r'framer(?=[A-Z_:-]|/(?:appear|handover|page-link|asset-reference)\b|\.sharedEnum\b)'
+    r'|Framer(?!(?:Logo|X)\b)(?=[A-Za-z_]))'
+)
+PORTFOLIO_NAMES = {
+    "hasFramerEventListener": "hasPortfolioEventListener",
+    "data-frameruni-stop-scroll": "data-portfolio-stop-scroll",
+    "--extracted-r6o4lv": "--portfolio-local-text-color",
+    "--token-3070d1e9-55ad-46ca-8fcd-c68fdb4c3fdb": "--portfolio-color-accent",
+    "--token-258ef8c7-ff75-4402-b09e-8e1423116f70": "--portfolio-color-text",
+    "--token-bbcd8ba6-eefc-47f9-82b5-ceb71d01e538": "--portfolio-color-text-muted",
+    "--token-c03152af-9434-4e53-80cd-af36712693e7": "--portfolio-color-gray",
+    "--token-2acf4abc-de2f-45fb-8e9f-cc40931c3995": "--portfolio-color-black",
+    "--token-f5699af5-6638-41ee-8fe5-f53419a78039": "--portfolio-color-white",
+    "--token-d532e80f-3585-40d1-971c-f36951f35081": "--portfolio-color-surface",
+    "--token-a5a7a22a-7a89-4fa5-a31f-47461818f88c": "--portfolio-color-surface-raised",
+    "--token-1bf0949b-5e7f-4a62-90c7-2a66478a97eb": "--portfolio-color-border",
+}
+
+
+def rename_portfolio_identifiers(text):
+    # The HTML, styles and bundled scripts share selectors, animation hooks and metadata keys.
+    # Keep upstream URLs, package names and the FramerLogo icon name as provided.
+    text = PORTFOLIO_NAMESPACE.sub(lambda match: "Portfolio" if match[0][0].isupper() else "portfolio", text)
+    for original, renamed in PORTFOLIO_NAMES.items():
+        text = text.replace(original, renamed)
+    return text
 
 
 def normalize(url):
@@ -300,7 +328,8 @@ def main():
                 base = os.path.relpath(ROOT / "assets/framer.com/m/phosphor-icons", target.parent).replace(os.sep, "/") + "/"
                 text = text.replace(ICON_BASE, "${new URL(" + json.dumps(base) + ",import.meta.url).href}")
                 text = text.replace(".js@0.0.57`", ".mjs`")
-            data = customize_portfolio(text, target.name).encode("utf-8")
+            text = customize_portfolio(text, target.name)
+            data = rename_portfolio_identifiers(text).encode("utf-8")
         elif target.suffix == ".framercms":
             # CMS records contain length-prefixed JSON image objects. Update both
             # the JSON and its byte length so Framer's binary decoder stays valid.
