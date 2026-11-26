@@ -11,6 +11,7 @@ import subprocess
 from urllib.parse import urljoin, urlsplit
 
 SOURCE = "https://samueldemir.framer.website/"
+FRAMER_SPINNER = "https://framerusercontent.com/images/pGiXYozQ3mE4cilNOItfe2L2fUA.svg"
 ROOT = Path(__file__).resolve().parents[1]
 HOSTS = {"framerusercontent.com", "app.framerstatic.com"}
 ICONS = ["LinkedinLogo", "GithubLogo", "YoutubeLogo", "StackOverflowLogo"]
@@ -67,13 +68,44 @@ def download(url):
     fetched = subprocess.run(["curl", "--fail", "--location", "--silent", "--show-error",
                               "--retry", "2", "--max-time", "90", url], capture_output=True)
     if fetched.returncode:
-        raise RuntimeError(f"{url}: {fetched.stderr.decode().strip()}")
-    data = fetched.stdout
+        error = fetched.stderr.decode().strip()
+        # The published bundle still references this retired loading icon.
+        if url != FRAMER_SPINNER or not error.endswith("404") or not target.is_file():
+            raise RuntimeError(f"{url}: {error}")
+        print("Using the saved Framer loading icon", flush=True)
+        data = target.read_bytes()
+    else:
+        data = fetched.stdout
     if target.suffix in TEXT:
         return url, data, references(data.decode("utf-8"), url)
     if target.suffix == ".framercms":
         return url, data, references(data.decode("latin1"), url)
     return url, data, []
+
+
+def customize_portfolio(text, filename):
+    if filename == "index.html":
+        text = re.sub(
+            r'(<a\b[^<>]*href="https://www\.dropbox\.com/[^"<>]*/lebenslauf_samuel_demir\.pdf[^"<>]*") rel(?=>)',
+            r'\1 target="_blank" rel="noopener noreferrer"', text,
+        )
+        text = re.sub(r'(?m)^[ \t]*<div id="__framer-badge-container">[^\n]*</div>\n', '', text)
+        text = re.sub(
+            r'<!--\$--><a\b[^<>]*data-framer-name="Built In"[^<>]*>'
+            r'<div\b[^<>]*data-framer-name="Built In Logo"[^<>]*></div></a><!--/\$-->', '', text,
+        )
+    elif filename.startswith("script_main."):
+        text = re.sub(r'\(function\(\)\{[^\n]*?getElementById\(`__framer-badge-container`\)[^\n]*?\}\)\(\)', '', text)
+    elif filename.startswith("shared-lib."):
+        text = text.replace(
+            'nodeId:`JyGMxwMno`,openInNewTab:!1,relValues:[]',
+            'nodeId:`JyGMxwMno`,openInNewTab:typeof b===`string`&&b.includes(`/lebenslauf_samuel_demir.pdf?`),relValues:[]',
+        )
+        text = re.sub(
+            r'/\*#__PURE__\*/\s*\w+\(\w+,\{href:`https://framer\.com/`,[^\n]*?'
+            r'"data-framer-name":`Built In Logo`[^}]*\}\)\}\)\}\),', '', text,
+        )
+    return text
 
 
 def main():
@@ -112,6 +144,8 @@ def main():
                 text = pattern.sub(lambda m: replacements[m.group()], text)
             if url == SOURCE:
                 text = re.sub(r'<script\b[^>]*src="https://events\.framer\.com/[^>]*>\s*</script>', '', text)
+                text = re.sub(r'<script>[^<]*__framer_force_showing_editorbar_since[^<]*</script>', '', text)
+                text = re.sub(r'(?m)^[ \t]+$', '', text.replace('\r\n', '\n'))
             if target.name.startswith("script_main."):
                 # The editor is a hosted authoring feature, not part of the portfolio.
                 text = text.replace("EditorBar:t===void 0?void 0:", "EditorBar:true?void 0:")
@@ -122,8 +156,8 @@ def main():
             if "shared-lib." in target.name:
                 base = os.path.relpath(ROOT / "assets/framer.com/m/phosphor-icons", target.parent).replace(os.sep, "/") + "/"
                 text = text.replace(ICON_BASE, "${new URL(" + json.dumps(base) + ",import.meta.url).href}")
-                text = text.replace("${bl}${_}.js@0.0.57", "${bl}${_}.mjs")
-            data = text.encode("utf-8")
+                text = text.replace(".js@0.0.57`", ".mjs`")
+            data = customize_portfolio(text, target.name).encode("utf-8")
         elif target.suffix == ".framercms":
             # CMS records contain length-prefixed JSON image objects. Update both
             # the JSON and its byte length so Framer's binary decoder stays valid.

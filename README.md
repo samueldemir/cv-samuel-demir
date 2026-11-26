@@ -8,7 +8,7 @@ Schriften, responsiven Layouts und ausgelieferten Framer-Animationen.
 Im Projektverzeichnis ausführen:
 
 ```bash
-python3 -m http.server 8080 --bind 127.0.0.1 --directory website
+python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
 Anschließend http://127.0.0.1:8080 öffnen. Mit `Ctrl+C` beenden.
@@ -29,7 +29,7 @@ müssen mit einem JavaScript-MIME-Type ausgeliefert werden.
 ## Aktualisieren
 
 ```bash
-python3 website/tools/mirror.py
+python3 tools/mirror.py
 ```
 
 Benötigt Python 3, `curl` und Internetzugriff. Die Aktualisierung überschreibt
